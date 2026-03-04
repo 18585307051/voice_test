@@ -53,13 +53,40 @@
       transition: all 0.3s ease;
     }
 
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
     .sidebar-title {
       font-size: 1.25rem;
       font-weight: 800;
-      margin-bottom: 30px;
       background: linear-gradient(135deg, #fff, var(--text-secondary));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+    }
+
+    .icon-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      transition: all 0.2s ease;
+    }
+
+    .icon-btn:hover {
+      background: var(--accent-primary);
+      color: #000;
+      transform: scale(1.05);
     }
 
     .history-list {
@@ -378,7 +405,10 @@
 <body>
   <div id="app">
     <aside class="sidebar">
-      <h1 class="sidebar-title">行程回顾</h1>
+      <div class="sidebar-header">
+        <h1 class="sidebar-title">行程回顾</h1>
+        <button id="new-session-btn" class="icon-btn" title="开启新行程">+</button>
+      </div>
       <div class="history-list" id="history">
         <div class="history-item active">
           <span class="time">当前进行中</span>
@@ -436,6 +466,7 @@
         this.textInput = document.getElementById('text-input');
         this.sendBtn = document.getElementById('send-btn');
         this.typeSelector = document.getElementById('type-selector');
+        this.newSessionBtn = document.getElementById('new-session-btn');
 
         this.isListening = false;
         this.isDriving = false;
@@ -452,6 +483,23 @@
         this.textInput.onkeypress = (e) => {
           if (e.key === 'Enter') this.handleTextSubmit();
         };
+        this.newSessionBtn.onclick = () => this.createNewSession();
+      }
+
+      createNewSession() {
+        if (confirm('是否结束当前行程并开启新会话？')) {
+          this.logHistory('🏁 行程已手动切换归档');
+          this.chatWrap.innerHTML = '';
+          this.isDriving = false;
+          this.isListening = false;
+          this.setOrbState('idle');
+
+          // Trigger welcome for new session
+          setTimeout(() => {
+            this.addMsg('ai', '新行程已就绪。');
+            this.wake();
+          }, 500);
+        }
       }
 
       async handleTextSubmit() {
