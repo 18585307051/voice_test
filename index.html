@@ -487,12 +487,13 @@
         this.addMsg('user', '你好，小王。');
 
         const response = this.isDriving
-          ? '我在呢，时刻为您反馈路况信息。'
-          : '你好，我是您的驾驶助手，今天您打算去哪？';
+          ? '我在呢，请问还有什么想记录的吗？'
+          : '你好！我是驾驶助手。今天的行程为您准备好了，请问我们可以开始了吗？';
 
         this.speak(response, () => {
+          // State remains 'listening' for continuous dialogue
           this.orbElem.className = 'orb-main listening';
-          this.statusElem.textContent = '命令模式 - 请下达指令';
+          this.statusElem.textContent = '对话中 - 实时监听指令';
           this.refreshTimeout();
         });
       }
@@ -501,24 +502,30 @@
         this.addMsg('user', text);
         const input = text.toLowerCase();
 
+        // Exit Commands
+        if (input.includes('再见') || input.includes('退下') || input.includes('休息') || input.includes('退出对话')) {
+          this.isListening = false;
+          this.speak('好的，那我也休息一会儿。需要我时随时喊我。');
+          return;
+        }
+
         if (input.includes('行程') && (input.includes('开始') || input.includes('预计'))) {
           this.isDriving = true;
-          this.speak('收到。行程已确认，播报内容同步中，现在正式开始驾驶记录。');
+          this.speak('收到。行程已确认，现在为您开启持续记录模式。');
           this.logHistory('🚗 已开启全程驾驶记录');
         } else if (input.includes('记录') || input.includes('不好') || input.includes('体验') || input.includes('超车')) {
-          this.speak('没问题，这条驾驶感言已预计帮您记录到了飞书多维表格。');
+          this.speak('好的，这条反馈已同步至飞书。还有其他发现吗？');
           this.flashOrb('#00ff88');
         } else if (input.includes('结束') && input.includes('行程')) {
           this.isDriving = false;
-          this.speak('好的，本次路线驾驶记录已完整归档。辛苦了！');
+          this.speak('好的，本次路程记录完毕。辛苦了，请问还没其他吩咐吗？');
           this.logHistory('🏁 行程归档');
         } else {
-          this.speak('收到，为您记录好了。');
+          this.speak('收到，记录好了。请继续说或者直接文字告诉我。');
         }
 
-        this.isListening = false;
-        this.orbElem.className = 'orb-main';
-        this.statusElem.textContent = '在线 - 等待唤醒';
+        // REFRESH timeout instead of killing conversation
+        this.refreshTimeout();
       }
 
       speak(text, callback) {
@@ -531,8 +538,13 @@
         this.statusElem.textContent = '小王播报中';
 
         utter.onend = () => {
-          this.orbElem.className = 'orb-main';
-          this.statusElem.textContent = '在线 - 等待唤醒';
+          if (this.isListening) {
+            this.orbElem.className = 'orb-main listening';
+            this.statusElem.textContent = '对话中 - 监听续航...';
+          } else {
+            this.orbElem.className = 'orb-main';
+            this.statusElem.textContent = '在线 - 等待唤醒';
+          }
           if (callback) callback();
         };
 
@@ -545,6 +557,7 @@
         msg.className = `msg ${role}`;
         msg.textContent = text;
         this.chatWrap.appendChild(msg);
+        this.chatWrap.scrollIntoView({ behavior: 'smooth', block: 'end' });
         this.chatWrap.scrollTop = this.chatWrap.scrollHeight;
       }
 
@@ -562,10 +575,14 @@
 
       refreshTimeout() {
         if (this.timer) clearTimeout(this.timer);
+        // Increase timeout to 10 seconds for continuous conversation
         this.timer = setTimeout(() => {
-          this.isListening = false;
-          this.orbElem.className = 'orb-main';
-        }, 5000);
+          if (this.isListening) {
+            this.isListening = false;
+            this.orbElem.className = 'orb-main';
+            this.statusElem.textContent = '对话已超时 - 等待下一次唤醒';
+          }
+        }, 10000);
       }
     }
 
