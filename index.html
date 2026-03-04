@@ -259,6 +259,90 @@
       border: 1px solid var(--glass-border);
     }
 
+    /* Input Bar */
+    .input-footer {
+      height: 100px;
+      padding: 0 40px 30px 40px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      z-index: 20;
+    }
+
+    .input-wrapper {
+      flex: 1;
+      height: 54px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 27px;
+      display: flex;
+      align-items: center;
+      padding: 0 6px 0 20px;
+      transition: all 0.3s ease;
+    }
+
+    .input-wrapper:focus-within {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+    }
+
+    #type-selector {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      outline: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    #type-selector:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    #text-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: 1rem;
+      padding: 0 15px;
+    }
+
+    #text-input::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    #send-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    #send-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 15px var(--accent-primary);
+    }
+
+    #send-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: #000;
+    }
+
     /* UI Utilities */
     ::-webkit-scrollbar {
       width: 5px;
@@ -296,6 +380,21 @@
         </div>
         <div class="status-badge" id="status">在线 - 等待唤醒</div>
       </div>
+
+      <div class="input-footer">
+        <select id="type-selector">
+          <option value="command">指令模式</option>
+          <option value="chat">闲聊模式</option>
+        </select>
+        <div class="input-wrapper">
+          <input type="text" id="text-input" placeholder="在这输入'你好小王'或直接发送指令..." />
+          <button id="send-btn">
+            <svg viewBox="0 0 24 24">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -306,6 +405,9 @@
         this.orbElem = document.getElementById('orb');
         this.statusElem = document.getElementById('status');
         this.historyWrap = document.getElementById('history');
+        this.textInput = document.getElementById('text-input');
+        this.sendBtn = document.getElementById('send-btn');
+        this.typeSelector = document.getElementById('type-selector');
 
         this.isListening = false;
         this.isDriving = false;
@@ -313,6 +415,23 @@
         this.synth = window.speechSynthesis;
 
         this.initEngine();
+        this.initEvents();
+      }
+
+      initEvents() {
+        this.sendBtn.onclick = () => this.handleTextSubmit();
+        this.textInput.onkeypress = (e) => {
+          if (e.key === 'Enter') this.handleTextSubmit();
+        };
+      }
+
+      handleTextSubmit() {
+        const text = this.textInput.value.trim();
+        if (!text) return;
+
+        console.log('Text Submission:', text);
+        this.handleInput(text);
+        this.textInput.value = '';
       }
 
       initEngine() {
