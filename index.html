@@ -246,6 +246,26 @@
       }
     }
 
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 40px var(--accent-primary);
+      }
+
+      50% {
+        transform: scale(1.1);
+        opacity: 0.7;
+        box-shadow: 0 0 60px var(--accent-secondary);
+      }
+
+      100% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 40px var(--accent-primary);
+      }
+    }
+
     .status-badge {
       margin-top: 25px;
       padding: 6px 16px;
@@ -401,6 +421,14 @@
   <script>
     class AgentCore {
       constructor() {
+        // LLM Configuration
+        this.llmConfig = {
+          model: 'gemini-3-flash',
+          baseUrl: 'http://127.0.0.1:8045/v1',
+          apiKey: 'sk-3408722146534b93a631e9512decd04d',
+          prompt: '你是一个驾驶助手。能和驾驶员进行对话聊天，对用户输入的内容进行对话文字整理，接地气，进行回复，然后在播报。'
+        };
+
         this.chatWrap = document.getElementById('chat');
         this.orbElem = document.getElementById('orb');
         this.statusElem = document.getElementById('status');
@@ -411,6 +439,7 @@
 
         this.isListening = false;
         this.isDriving = false;
+        this.isThinking = false;
         this.recognition = null;
         this.synth = window.speechSynthesis;
 
@@ -425,13 +454,62 @@
         };
       }
 
-      handleTextSubmit() {
+      async handleTextSubmit() {
         const text = this.textInput.value.trim();
-        if (!text) return;
+        if (!text || this.isThinking) return;
 
-        console.log('Text Submission:', text);
-        this.handleInput(text);
         this.textInput.value = '';
+        this.addMsg('user', text);
+        await this.processWithLLM(text);
+      }
+
+      async callLLM(userInput) {
+        try {
+          this.setOrbState('thinking');
+          const response = await fetch(`${this.llmConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.llmConfig.apiKey}`
+            },
+            body: JSON.stringify({
+              model: this.llmConfig.model,
+              messages: [
+                { role: 'system', content: this.llmConfig.prompt },
+                { role: 'user', content: userInput }
+              ],
+              temperature: 0.7
+            })
+          });
+
+          const data = await response.json();
+          return data.choices[0].message.content;
+        } catch (error) {
+          console.error('LLM Error:', error);
+          return null;
+        } finally {
+          this.setOrbState(this.isListening ? 'listening' : 'idle');
+        }
+      }
+
+      setOrbState(state) {
+        this.orbElem.className = 'orb-main'; // Reset all classes
+        this.orbElem.style.animation = ''; // Reset animation
+        this.isThinking = false; // Reset thinking state
+
+        if (state === 'listening') {
+          this.orbElem.classList.add('listening');
+          this.statusElem.textContent = '对话中 - 实时监听指令';
+        } else if (state === 'speaking') {
+          this.orbElem.classList.add('speaking');
+          this.statusElem.textContent = '小王播报中';
+        } else if (state === 'thinking') {
+          this.orbElem.style.animation = 'pulse 0.5s infinite';
+          this.statusElem.textContent = '小王思考中...';
+          this.isThinking = true;
+        } else { // idle or default
+          this.statusElem.textContent = '在线 - 等待唤醒';
+        }
       }
 
       initEngine() {
@@ -469,7 +547,7 @@
         try { this.recognition.start(); } catch (err) { }
       }
 
-      handleInput(text) {
+      async handleInput(text) {
         const input = text.toLowerCase();
 
         if (input.includes('你好小王') || input.includes('你好，小王') || input.includes('你好小网')) {
@@ -478,28 +556,24 @@
         }
 
         if (this.isListening) {
-          this.process(text);
+          this.addMsg('user', text);
+          await this.processWithLLM(text);
         }
       }
 
-      wake() {
-        this.isListening = true;
-        this.addMsg('user', '你好，小王。');
+      async processWithLLM(text) {
+        if (this.isThinking) return;
+        this.isThinking = true;
 
-        const response = this.isDriving
-          ? '我在呢，请问还有什么想记录的吗？'
-          : '你好！我是驾驶助手。今天的行程为您准备好了，请问我们可以开始了吗？';
+        // Use LLM to refine the input
+        const refinedText = await this.callLLM(text);
+        const finalText = refinedText || text; // Fallback to raw if API fails
 
-        this.speak(response, () => {
-          // State remains 'listening' for continuous dialogue
-          this.orbElem.className = 'orb-main listening';
-          this.statusElem.textContent = '对话中 - 实时监听指令';
-          this.refreshTimeout();
-        });
+        this.isThinking = false;
+        this.process(finalText);
       }
 
       process(text) {
-        this.addMsg('user', text);
         const input = text.toLowerCase();
 
         // Exit Commands
@@ -513,7 +587,7 @@
           this.isDriving = true;
           this.speak('收到。行程已确认，现在为您开启持续记录模式。');
           this.logHistory('🚗 已开启全程驾驶记录');
-        } else if (input.includes('记录') || input.includes('不好') || input.includes('体验') || input.includes('超车')) {
+        } else if (input.includes('记录') || input.includes('不好') || input.includes('体验') || input.includes('超车-')) {
           this.speak('好的，这条反馈已同步至飞书。还有其他发现吗？');
           this.flashOrb('#00ff88');
         } else if (input.includes('结束') && input.includes('行程')) {
@@ -521,11 +595,25 @@
           this.speak('好的，本次路程记录完毕。辛苦了，请问还没其他吩咐吗？');
           this.logHistory('🏁 行程归档');
         } else {
-          this.speak('收到，记录好了。请继续说或者直接文字告诉我。');
+          // LLM outputs might be long, so we use them directly
+          this.speak(text);
         }
 
-        // REFRESH timeout instead of killing conversation
         this.refreshTimeout();
+      }
+
+      wake() {
+        this.isListening = true;
+
+        const response = this.isDriving
+          ? '我在呢，请问还有什么想记录的吗？'
+          : '你好！我是驾驶助手。今天的行程为您准备好了，请问我们可以开始了吗？';
+
+        this.speak(response, () => {
+          // State remains 'listening' for continuous dialogue
+          this.setOrbState('listening');
+          this.refreshTimeout();
+        });
       }
 
       speak(text, callback) {
@@ -534,17 +622,10 @@
         utter.lang = 'zh-CN';
         utter.rate = 1.1;
 
-        this.orbElem.className = 'orb-main speaking';
-        this.statusElem.textContent = '小王播报中';
+        this.setOrbState('speaking');
 
         utter.onend = () => {
-          if (this.isListening) {
-            this.orbElem.className = 'orb-main listening';
-            this.statusElem.textContent = '对话中 - 监听续航...';
-          } else {
-            this.orbElem.className = 'orb-main';
-            this.statusElem.textContent = '在线 - 等待唤醒';
-          }
+          this.setOrbState(this.isListening ? 'listening' : 'idle');
           if (callback) callback();
         };
 
